@@ -38,6 +38,7 @@ public class VentanaInicio extends javax.swing.JFrame {
         jLabel1.setText("¿A donde desea entrar?");
 
         btnAdmin.setText("Administrador");
+        btnAdmin.addActionListener(this::btnAdminActionPerformed);
 
         btnCajero.setText("Cajero");
         btnCajero.addActionListener(this::btnCajeroActionPerformed);
@@ -77,8 +78,13 @@ public class VentanaInicio extends javax.swing.JFrame {
 
     private void btnCajeroActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCajeroActionPerformed
         // TODO add your handling code here:
-        new VentanaAdmin().setVisible(true);
+        new VentanaCajero().setVisible(true);
     }//GEN-LAST:event_btnCajeroActionPerformed
+
+    private void btnAdminActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnAdminActionPerformed
+        // TODO add your handling code here:
+        new VentanaAdmin().setVisible(true);
+    }//GEN-LAST:event_btnAdminActionPerformed
 
     /**
      * @param args the command line arguments

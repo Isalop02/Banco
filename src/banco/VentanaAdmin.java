@@ -20,6 +20,29 @@ public class VentanaAdmin extends javax.swing.JFrame {
     public VentanaAdmin() {
         initComponents();
     }
+    private void listarCajeros() {
+    try {
+        DefaultTableModel modelo = (DefaultTableModel) tablaCajeros.getModel();
+        modelo.setRowCount(0);
+        Connection con = Conexion.conectar();
+        ResultSet rs = con.createStatement().executeQuery("SELECT * FROM cajeros");
+        while (rs.next()) {
+            modelo.addRow(new Object[]{
+                rs.getInt("id"), rs.getInt("ndiez"), rs.getInt("nveinte"),
+                rs.getInt("ncincuenta"), rs.getInt("ncien"), rs.getInt("estado")
+            });
+        }
+        con.close();
+    } catch (Exception e) {
+        JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+    }
+}
+
+// Devuelve la columna según lo escogido en el combo (10000, 20000, 50000, 100000)
+private String columnaBillete() {
+    String[] columnas = {"ndiez", "nveinte", "ncincuenta", "ncien"};
+    return columnas[cbDenominacion.getSelectedIndex()];
+}
     // Llena la tabla de clientes con el resultado de una consulta
 private void llenarTablaClientes(ResultSet rs) throws Exception {
     DefaultTableModel modelo = (DefaultTableModel) tablaClientes.getModel();
@@ -299,16 +322,22 @@ private void listarClientes() {
         txtVeinte.addActionListener(this::txtVeinteActionPerformed);
 
         btnListarCajeros.setText("Listar");
+        btnListarCajeros.addActionListener(this::btnListarCajerosActionPerformed);
 
         btnAgregarCajero.setText("Agregar");
+        btnAgregarCajero.addActionListener(this::btnAgregarCajeroActionPerformed);
 
         btnEditarCajero.setText("Editar");
+        btnEditarCajero.addActionListener(this::btnEditarCajeroActionPerformed);
 
         btnEliminarCajero.setText("Eliminar");
+        btnEliminarCajero.addActionListener(this::btnEliminarCajeroActionPerformed);
 
         btnPonerBilletes.setText("Agregar billetes");
+        btnPonerBilletes.addActionListener(this::btnPonerBilletesActionPerformed);
 
         btnQuitarBilletes.setText("Quitar billetes");
+        btnQuitarBilletes.addActionListener(this::btnQuitarBilletesActionPerformed);
 
         btnLimpiarCajeros.setText("Limpiar");
         btnLimpiarCajeros.addActionListener(this::btnLimpiarCajerosActionPerformed);
@@ -323,6 +352,11 @@ private void listarClientes() {
                 "ID", "10.000", "20.000", "50.000", "100.000", "Estado"
             }
         ));
+        tablaCajeros.addMouseListener(new java.awt.event.MouseAdapter() {
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                tablaCajerosMouseClicked(evt);
+            }
+        });
         jScrollPane2.setViewportView(tablaCajeros);
 
         javax.swing.GroupLayout jPanel3Layout = new javax.swing.GroupLayout(jPanel3);
@@ -431,6 +465,7 @@ private void listarClientes() {
         lblPromedio.setText("Dinero promedio:");
 
         jButton1.setText("Calcular");
+        jButton1.addActionListener(this::jButton1ActionPerformed);
 
         javax.swing.GroupLayout jPanel2Layout = new javax.swing.GroupLayout(jPanel2);
         jPanel2.setLayout(jPanel2Layout);
@@ -681,6 +716,165 @@ txtSaldo.setText(tablaClientes.getValueAt(fila, 6).toString());
     JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
 }
     }//GEN-LAST:event_btnRetirarActionPerformed
+
+    private void btnListarCajerosActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnListarCajerosActionPerformed
+        // TODO add your handling code here:
+        listarCajeros();
+    }//GEN-LAST:event_btnListarCajerosActionPerformed
+
+    private void btnAgregarCajeroActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnAgregarCajeroActionPerformed
+        // TODO add your handling code here:
+        try {
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement(
+        "INSERT INTO cajeros (ndiez, nveinte, ncincuenta, ncien, estado) VALUES (?, ?, ?, ?, 0)");
+    ps.setInt(1, Integer.parseInt(txtDiez.getText()));
+    ps.setInt(2, Integer.parseInt(txtVeinte.getText()));
+    ps.setInt(3, Integer.parseInt(txtCincuenta.getText()));
+    ps.setInt(4, Integer.parseInt(txtCien.getText()));
+    ps.executeUpdate();
+    con.close();
+    JOptionPane.showMessageDialog(this, "Cajero agregado");
+    listarCajeros();
+} catch (Exception e) {
+    JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnAgregarCajeroActionPerformed
+
+    private void tablaCajerosMouseClicked(java.awt.event.MouseEvent evt) {//GEN-FIRST:event_tablaCajerosMouseClicked
+        // TODO add your handling code here:
+        int fila = tablaCajeros.getSelectedRow();
+txtIdCajero.setText(tablaCajeros.getValueAt(fila, 0).toString());
+txtDiez.setText(tablaCajeros.getValueAt(fila, 1).toString());
+txtVeinte.setText(tablaCajeros.getValueAt(fila, 2).toString());
+txtCincuenta.setText(tablaCajeros.getValueAt(fila, 3).toString());
+txtCien.setText(tablaCajeros.getValueAt(fila, 4).toString());
+    }//GEN-LAST:event_tablaCajerosMouseClicked
+
+    private void btnEditarCajeroActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEditarCajeroActionPerformed
+        // TODO add your handling code here:
+        try {
+    int id = Integer.parseInt(txtIdCajero.getText());
+    if (!Conexion.bloquear("cajeros", id)) {
+        JOptionPane.showMessageDialog(this, "El cajero no existe o está ocupado");
+        return;
+    }
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement(
+        "UPDATE cajeros SET ndiez=?, nveinte=?, ncincuenta=?, ncien=? WHERE id=?");
+    ps.setInt(1, Integer.parseInt(txtDiez.getText()));
+    ps.setInt(2, Integer.parseInt(txtVeinte.getText()));
+    ps.setInt(3, Integer.parseInt(txtCincuenta.getText()));
+    ps.setInt(4, Integer.parseInt(txtCien.getText()));
+    ps.setInt(5, id);
+    ps.executeUpdate();
+    con.close();
+    Conexion.liberar("cajeros", id);
+    JOptionPane.showMessageDialog(this, "Cajero editado");
+    listarCajeros();
+} catch (Exception e) {
+    JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnEditarCajeroActionPerformed
+
+    private void btnEliminarCajeroActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnEliminarCajeroActionPerformed
+        // TODO add your handling code here:
+        try {
+    int id = Integer.parseInt(txtIdCajero.getText());
+    int respuesta = JOptionPane.showConfirmDialog(this, "¿Seguro que desea eliminar el cajero?");
+    if (respuesta != JOptionPane.YES_OPTION) return;
+
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement("DELETE FROM cajeros WHERE id = ? AND estado = 0");
+    ps.setInt(1, id);
+    int filas = ps.executeUpdate();
+    con.close();
+
+    if (filas > 0) JOptionPane.showMessageDialog(this, "Cajero eliminado");
+    else JOptionPane.showMessageDialog(this, "No existe o está ocupado");
+    listarCajeros();
+} catch (Exception e) {
+    JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnEliminarCajeroActionPerformed
+
+    private void btnPonerBilletesActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnPonerBilletesActionPerformed
+        // TODO add your handling code here:
+        try {
+    int id = Integer.parseInt(txtIdCajero.getText());
+    int cantidad = Integer.parseInt(txtCantidad.getText());
+    if (cantidad <= 0) {
+        JOptionPane.showMessageDialog(this, "La cantidad debe ser mayor a 0");
+        return;
+    }
+    if (!Conexion.bloquear("cajeros", id)) {
+        JOptionPane.showMessageDialog(this, "El cajero no existe o está ocupado");
+        return;
+    }
+    String col = columnaBillete();
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement(
+        "UPDATE cajeros SET " + col + " = " + col + " + ? WHERE id = ?");
+    ps.setInt(1, cantidad);
+    ps.setInt(2, id);
+    ps.executeUpdate();
+    con.close();
+    Conexion.liberar("cajeros", id);
+    JOptionPane.showMessageDialog(this, "Billetes agregados");
+    listarCajeros();
+} catch (Exception e) {
+    JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnPonerBilletesActionPerformed
+
+    private void btnQuitarBilletesActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnQuitarBilletesActionPerformed
+        // TODO add your handling code here:
+        try {
+    int id = Integer.parseInt(txtIdCajero.getText());
+    int cantidad = Integer.parseInt(txtCantidad.getText());
+    if (cantidad <= 0) {
+        JOptionPane.showMessageDialog(this, "La cantidad debe ser mayor a 0");
+        return;
+    }
+    if (!Conexion.bloquear("cajeros", id)) {
+        JOptionPane.showMessageDialog(this, "El cajero no existe o está ocupado");
+        return;
+    }
+    String col = columnaBillete();
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement(
+        "UPDATE cajeros SET " + col + " = " + col + " - ? WHERE id = ? AND " + col + " >= ?");
+    ps.setInt(1, cantidad);
+    ps.setInt(2, id);
+    ps.setInt(3, cantidad);
+    int filas = ps.executeUpdate();
+    con.close();
+    Conexion.liberar("cajeros", id);
+
+    if (filas > 0) JOptionPane.showMessageDialog(this, "Billetes retirados");
+    else JOptionPane.showMessageDialog(this, "No hay suficientes billetes");
+    listarCajeros();
+} catch (Exception e) {
+    JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+}
+
+    }//GEN-LAST:event_btnQuitarBilletesActionPerformed
+
+    private void jButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_jButton1ActionPerformed
+        // TODO add your handling code here:
+        try {
+    Connection con = Conexion.conectar();
+    ResultSet rs = con.createStatement().executeQuery(
+        "SELECT COUNT(*) AS cantidad, AVG(saldo) AS promedio FROM clientes");
+    if (rs.next()) {
+        lblNumClientes.setText("Número de clientes: " + rs.getInt("cantidad"));
+        lblPromedio.setText("Dinero promedio: $" + String.format("%,.0f", rs.getDouble("promedio")));
+    }
+    con.close();
+} catch (Exception e) {
+    JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_jButton1ActionPerformed
 
     /**
      * @param args the command line arguments

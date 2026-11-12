@@ -3,13 +3,17 @@
  * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
  */
 package banco;
-
+import java.sql.*;
 /**
  *
  * @author isalo
  */
 public class VentanaCajero extends javax.swing.JFrame {
     String monto = "";
+    boolean enRetiro = false;   // true cuando cliente y cajero están bloqueados
+    int idCliente, idCajero;
+    String nombreCliente;
+    double saldoCliente;
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(VentanaCajero.class.getName());
 
@@ -19,6 +23,149 @@ public class VentanaCajero extends javax.swing.JFrame {
     public VentanaCajero() {
         initComponents();
     }
+    // Busca un cliente por número de cuenta y guarda sus datos
+private boolean buscarCliente(String cuenta) throws Exception {
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement("SELECT * FROM clientes WHERE ncuenta = ?");
+    ps.setInt(1, Integer.parseInt(cuenta));
+    ResultSet rs = ps.executeQuery();
+    boolean existe = rs.next();
+    if (existe) {
+        idCliente = rs.getInt("id");
+        nombreCliente = rs.getString("nombre") + " " + rs.getString("apellido");
+        saldoCliente = rs.getDouble("saldo");
+    }
+    con.close();
+    return existe;
+}
+
+// Libera cliente y cajero si estaban bloqueados
+private void liberarTodo() {
+    try {
+        if (enRetiro) {
+            Conexion.liberar("clientes", idCliente);
+            Conexion.liberar("cajeros", idCajero);
+        }
+    } catch (Exception e) { }
+    enRetiro = false;
+    monto = "";
+}
+    private void hacerRetiro() throws Exception {
+    if (monto.isEmpty()) {
+        pantalla.setText("Cliente: " + nombreCliente + "\nDigite un monto\n\nMonto: ");
+        return;
+    }
+    int valor = Integer.parseInt(monto);
+
+    // Validar mínimo, máximo y múltiplo
+    if (valor < 10000 || valor > 1000000 || valor % 10000 != 0) {
+        monto = "";
+        pantalla.setText("Error: el monto debe estar entre 10.000 y 1.000.000"
+                + "\ny ser múltiplo de 10.000\n\nMonto: ");
+        return;
+    }
+    // Validar saldo del cliente
+    if (valor > saldoCliente) {
+        monto = "";
+        pantalla.setText("Error: saldo insuficiente. Saldo: $" + dinero(saldoCliente) + "\n\nMonto: ");
+        return;
+    }
+
+    // Leer los billetes del cajero (orden: 100k, 50k, 20k, 10k)
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement("SELECT * FROM cajeros WHERE id = ?");
+    ps.setInt(1, idCajero);
+    ResultSet rs = ps.executeQuery();
+    rs.next();
+    int[] disponibles = {rs.getInt("ncien"), rs.getInt("ncincuenta"), rs.getInt("nveinte"), rs.getInt("ndiez")};
+    con.close();
+
+    // Validar dinero del cajero
+    int totalCajero = disponibles[0] * 100000 + disponibles[1] * 50000
+                    + disponibles[2] * 20000 + disponibles[3] * 10000;
+    if (valor > totalCajero) {
+        monto = "";
+        pantalla.setText("Error: el cajero no tiene suficiente dinero\n\nMonto: ");
+        return;
+    }
+
+    int[] entregar = calcularBilletes(valor, disponibles);
+    if (entregar == null) {
+        monto = "";
+        pantalla.setText("Error: el cajero no tiene los billetes para ese monto\n\nMonto: ");
+        return;
+    }
+
+    // Actualizar saldo del cliente y billetes del cajero
+    con = Conexion.conectar();
+    ps = con.prepareStatement("UPDATE clientes SET saldo = saldo - ? WHERE id = ?");
+    ps.setInt(1, valor);
+    ps.setInt(2, idCliente);
+    ps.executeUpdate();
+    ps = con.prepareStatement(
+        "UPDATE cajeros SET ncien = ncien - ?, ncincuenta = ncincuenta - ?, "
+      + "nveinte = nveinte - ?, ndiez = ndiez - ? WHERE id = ?");
+    ps.setInt(1, entregar[0]);
+    ps.setInt(2, entregar[1]);
+    ps.setInt(3, entregar[2]);
+    ps.setInt(4, entregar[3]);
+    ps.setInt(5, idCajero);
+    ps.executeUpdate();
+    con.close();
+
+    pantalla.setText("Retiro exitoso\nCliente: " + nombreCliente
+            + "\nValor: $" + dinero(valor)
+            + "\n\nBilletes entregados:"
+            + "\n  100.000 x " + entregar[0]
+            + "\n   50.000 x " + entregar[1]
+            + "\n   20.000 x " + entregar[2]
+            + "\n   10.000 x " + entregar[3]
+            + "\n\nSaldo restante: $" + dinero(saldoCliente - valor));
+
+    liberarTodo(); // vuelve cliente y cajero a disponibles
+}
+
+// Calcula cuántos billetes de cada uno entregar. Devuelve null si no se puede
+private int[] calcularBilletes(int valor, int[] disponibles) {
+    int[] valores = {100000, 50000, 20000, 10000};
+    int[] entregar = {0, 0, 0, 0};
+
+    // Reglas especiales del enunciado
+    if (valor == 50000) {
+        entregar[2] = 2;   // dos de 20.000
+        entregar[3] = 1;   // uno de 10.000
+    } else if (valor >= 100000) {
+        entregar[1] = 1;   // uno de 50.000
+        entregar[2] = 2;   // dos de 20.000
+        entregar[3] = 1;   // uno de 10.000
+    }
+
+    // Lo que falta por entregar
+    int resto = valor;
+    for (int i = 0; i < 4; i++) {
+        resto = resto - entregar[i] * valores[i];
+    }
+
+    // Completar con los billetes más grandes posibles (menor cantidad de billetes)
+    for (int i = 0; i < 4; i++) {
+        int quedan = disponibles[i] - entregar[i];
+        if (quedan < 0) quedan = 0;
+        int cantidad = Math.min(resto / valores[i], quedan);
+        entregar[i] = entregar[i] + cantidad;
+        resto = resto - cantidad * valores[i];
+    }
+
+    // Verificar que se completó y que hay billetes suficientes
+    if (resto != 0) return null;
+    for (int i = 0; i < 4; i++) {
+        if (entregar[i] > disponibles[i]) return null;
+    }
+    return entregar;
+}
+// Formato de dinero: 1500000 -> 1.500.000
+private String dinero(double valor) {
+    return String.format("%,.0f", valor);
+}
 
     /**
      * This method is called from within the constructor to initialize the form.
@@ -102,19 +249,25 @@ public class VentanaCajero extends javax.swing.JFrame {
         btnBorrar.addActionListener(this::btnBorrarActionPerformed);
 
         btn0.setText("0");
+        btn0.addActionListener(this::btn0ActionPerformed);
 
         btnLimpiar.setText("Limpiar");
         btnLimpiar.addActionListener(this::btnLimpiarActionPerformed);
 
         btnSaldo.setText("Consultar saldo");
+        btnSaldo.addActionListener(this::btnSaldoActionPerformed);
 
         btnConsignar.setText("Consignar");
+        btnConsignar.addActionListener(this::btnConsignarActionPerformed);
 
         btnRetirar.setText("Transferir");
+        btnRetirar.addActionListener(this::btnRetirarActionPerformed);
 
         btnCancelar.setText("Cancelar");
+        btnCancelar.addActionListener(this::btnCancelarActionPerformed);
 
         btnTransferir.setText("Retirar");
+        btnTransferir.addActionListener(this::btnTransferirActionPerformed);
 
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
@@ -295,6 +448,155 @@ pantalla.setText("Monto: " + monto);
         monto = "";
      pantalla.setText("Monto: ");
     }//GEN-LAST:event_btnLimpiarActionPerformed
+
+    private void btnSaldoActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnSaldoActionPerformed
+        // TODO add your handling code here:
+        try {
+    if (buscarCliente(txtCuenta.getText())) {
+        pantalla.setText("Cliente: " + nombreCliente + "\nSaldo: $" + dinero(saldoCliente));
+    } else {
+        pantalla.setText("Error: la cuenta no existe");
+    }
+} catch (Exception e) {
+    pantalla.setText("Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnSaldoActionPerformed
+
+    private void btnConsignarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnConsignarActionPerformed
+        // TODO add your handling code here:
+        try {
+    if (!buscarCliente(txtCuenta.getText())) {
+        pantalla.setText("Error: la cuenta no existe");
+        return;
+    }
+    if (monto.isEmpty() || Integer.parseInt(monto) <= 0) {
+        pantalla.setText("Digite el monto con el teclado\n\nMonto: ");
+        return;
+    }
+    int valor = Integer.parseInt(monto);
+    if (!Conexion.bloquear("clientes", idCliente)) {
+        pantalla.setText("El cliente está ocupado, intente luego");
+        return;
+    }
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement("UPDATE clientes SET saldo = saldo + ? WHERE id = ?");
+    ps.setInt(1, valor);
+    ps.setInt(2, idCliente);
+    ps.executeUpdate();
+    con.close();
+    Conexion.liberar("clientes", idCliente);
+
+    monto = "";
+    pantalla.setText("Consignación exitosa\nCliente: " + nombreCliente
+            + "\nNuevo saldo: $" + dinero(saldoCliente + valor));
+} catch (Exception e) {
+    pantalla.setText("Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnConsignarActionPerformed
+
+    private void btnRetirarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnRetirarActionPerformed
+        // TODO add your handling code here:
+        try {
+    if (!buscarCliente(txtDestino.getText())) {
+        pantalla.setText("Error: la cuenta destino no existe");
+        return;
+    }
+    int idDestino = idCliente;
+    String nombreDestino = nombreCliente;
+
+    if (!buscarCliente(txtCuenta.getText())) {
+        pantalla.setText("Error: la cuenta origen no existe");
+        return;
+    }
+    if (idCliente == idDestino) {
+        pantalla.setText("Error: no puede transferir a la misma cuenta");
+        return;
+    }
+    if (monto.isEmpty() || Integer.parseInt(monto) <= 0) {
+        pantalla.setText("Digite el monto con el teclado\n\nMonto: ");
+        return;
+    }
+    int valor = Integer.parseInt(monto);
+    if (valor > saldoCliente) {
+        pantalla.setText("Error: saldo insuficiente\nSaldo: $" + dinero(saldoCliente));
+        return;
+    }
+    if (!Conexion.bloquear("clientes", idCliente)) {
+        pantalla.setText("La cuenta origen está ocupada");
+        return;
+    }
+    if (!Conexion.bloquear("clientes", idDestino)) {
+        Conexion.liberar("clientes", idCliente);
+        pantalla.setText("La cuenta destino está ocupada");
+        return;
+    }
+
+    Connection con = Conexion.conectar();
+    PreparedStatement ps = con.prepareStatement("UPDATE clientes SET saldo = saldo - ? WHERE id = ?");
+    ps.setInt(1, valor);
+    ps.setInt(2, idCliente);
+    ps.executeUpdate();
+    ps = con.prepareStatement("UPDATE clientes SET saldo = saldo + ? WHERE id = ?");
+    ps.setInt(1, valor);
+    ps.setInt(2, idDestino);
+    ps.executeUpdate();
+    con.close();
+
+    Conexion.liberar("clientes", idCliente);
+    Conexion.liberar("clientes", idDestino);
+
+    monto = "";
+    pantalla.setText("Transferencia exitosa\nDe: " + nombreCliente + "\nPara: " + nombreDestino
+            + "\nValor: $" + dinero(valor) + "\nSu saldo: $" + dinero(saldoCliente - valor));
+} catch (Exception e) {
+    pantalla.setText("Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnRetirarActionPerformed
+
+    private void btnTransferirActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnTransferirActionPerformed
+        // TODO add your handling code here:
+        try {
+    if (!enRetiro) {
+        // PASO 1: validar y bloquear
+        if (!buscarCliente(txtCuenta.getText())) {
+            pantalla.setText("Error: la cuenta no existe");
+            return;
+        }
+        idCajero = Integer.parseInt(txtCajero.getText());
+        if (!Conexion.bloquear("clientes", idCliente)) {
+            pantalla.setText("El cliente está ocupado");
+            return;
+        }
+        if (!Conexion.bloquear("cajeros", idCajero)) {
+            Conexion.liberar("clientes", idCliente);
+            pantalla.setText("El cajero no existe o está ocupado");
+            return;
+        }
+        enRetiro = true;
+        monto = "";
+        pantalla.setText("Cliente: " + nombreCliente
+                + "\nDigite el monto y presione Retirar\n\nMonto: ");
+    } else {
+        // PASO 2: hacer el retiro
+        hacerRetiro();
+    }
+} catch (Exception e) {
+    liberarTodo();
+    pantalla.setText("Error: " + e.getMessage());
+}
+    }//GEN-LAST:event_btnTransferirActionPerformed
+
+    private void btnCancelarActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btnCancelarActionPerformed
+        // TODO add your handling code here:
+        liberarTodo();
+pantalla.setText("Operación cancelada\n\nMonto: ");
+    }//GEN-LAST:event_btnCancelarActionPerformed
+
+    private void btn0ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_btn0ActionPerformed
+        // TODO add your handling code here:
+        monto = monto + "0";
+pantalla.setText("Monto: " + monto);
+    }//GEN-LAST:event_btn0ActionPerformed
 
     /**
      * @param args the command line arguments
